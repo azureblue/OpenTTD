@@ -2597,6 +2597,7 @@ static void ReportNewsProductionChangeIndustry(Industry *ind, CargoID type, int 
 
 static const uint PERCENT_TRANSPORTED_60 = 153;
 static const uint PERCENT_TRANSPORTED_80 = 204;
+static bool force_smooth_economy = true;
 
 /**
  * Change industry production or do closure
@@ -2612,7 +2613,7 @@ static void ChangeIndustryProduction(Industry *i, bool monthly)
 	bool suppress_message = false;
 	bool recalculate_multipliers = false; ///< reinitialize production_rate to match prod_level
 	/* don't use smooth economy for industries using production related callbacks */
-	bool smooth_economy = indspec->UsesSmoothEconomy();
+	bool smooth_economy = indspec->UsesSmoothEconomy() || force_smooth_economy;
 	byte div = 0;
 	byte mul = 0;
 	int8 increment = 0;
@@ -2651,7 +2652,7 @@ static void ChangeIndustryProduction(Industry *i, bool monthly)
 		if (indspec->life_type == INDUSTRYLIFE_BLACK_HOLE) return;
 	}
 
-	if (standard || (!callback_enabled && (indspec->life_type & (INDUSTRYLIFE_ORGANIC | INDUSTRYLIFE_EXTRACTIVE)) != 0)) {
+	if (standard || ((!callback_enabled || force_smooth_economy) && (indspec->life_type & (INDUSTRYLIFE_ORGANIC | INDUSTRYLIFE_EXTRACTIVE)) != 0)) {
 		/* decrease or increase */
 		bool only_decrease = (indspec->behaviour & INDUSTRYBEH_DONT_INCR_PROD) && _settings_game.game_creation.landscape == LT_TEMPERATE;
 
@@ -2659,10 +2660,12 @@ static void ChangeIndustryProduction(Industry *i, bool monthly)
 			closeit = true;
 			for (byte j = 0; j < lengthof(i->produced_cargo); j++) {
 				if (i->produced_cargo[j] == CT_INVALID) continue;
+                bool transported_80 = (i->last_month_pct_transported[j] >= PERCENT_TRANSPORTED_80);
+                bool transported_60 = (i->last_month_pct_transported[j] >= PERCENT_TRANSPORTED_60);
 				uint32 r = Random();
 				int old_prod, new_prod, percent;
 				/* If over 60% is transported, mult is 1, else mult is -1. */
-				int mult = (i->last_month_pct_transported[j] > PERCENT_TRANSPORTED_60) ? 1 : -1;
+				int mult = transported_60 ? 1 : -1;
 
 				new_prod = old_prod = i->production_rate[j];
 
@@ -2672,13 +2675,13 @@ static void ChangeIndustryProduction(Industry *i, bool monthly)
 					mult = -1;
 				/* For normal industries, if over 60% is transported, 33% chance for decrease.
 				 * Bonus for very high station ratings (over 80%): 16% chance for decrease. */
-				} else if (Chance16I(1, ((i->last_month_pct_transported[j] > PERCENT_TRANSPORTED_80) ? 6 : 3), r)) {
+				} else if (Chance16I(1, (transported_80 ? 7 : 4), r)) {
 					mult *= -1;
 				}
 
 				/* 4.5% chance for 3-23% (or 1 unit for very low productions) production change,
 				 * determined by mult value. If mult = 1 prod. increases, else (-1) it decreases. */
-				if (Chance16I(1, 22, r >> 16)) {
+				if (Chance16I(1, 20, r >> 16)) {
 					new_prod += mult * (max(((RandomRange(50) + 10) * old_prod) >> 8, 1U));
 				}
 
@@ -2701,7 +2704,7 @@ static void ChangeIndustryProduction(Industry *i, bool monthly)
 				/* Close the industry when it has the lowest possible production rate */
 				if (new_prod > 1) closeit = false;
 
-				if (abs(percent) >= 10) {
+				if (abs(percent) >= 1) {
 					ReportNewsProductionChangeIndustry(i, i->produced_cargo[j], percent);
 				}
 			}
