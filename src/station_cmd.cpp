@@ -3465,8 +3465,8 @@ static void UpdateStationRating(Station *st)
 	byte_inc_sat(&st->time_since_unload);
 
 	const CargoSpec *cs;
-	FOR_ALL_CARGOSPECS(cs) {
-		GoodsEntry *ge = &st->goods[cs->Index()];
+	FOR_ALL_CARGOSPECS(cs) {        
+		GoodsEntry *ge = &st->goods[cs->Index()];        
 		/* Slowly increase the rating back to his original level in the case we
 		 *  didn't deliver cargo yet to this station. This happens when a bribe
 		 *  failed while you didn't moved that cargo yet to a station. */
@@ -3523,7 +3523,9 @@ static void UpdateStationRating(Station *st)
 			}
 
 			if (!skip) {
-				int b = ge->last_speed - 85;
+                
+				int b = ((cs->classes & CargoClass::CC_PASSENGERS) ? ge->last_speed : 255) - 85;
+                
 				if (b >= 0) rating += b >> 2;
 
 				byte waittime = ge->time_since_pickup;
@@ -3539,11 +3541,22 @@ static void UpdateStationRating(Station *st)
 				if (ge->max_waiting_cargo <= 600) rating += 10;
 				if (ge->max_waiting_cargo <= 300) rating += 20;
 				if (ge->max_waiting_cargo <= 100) rating += 10;
+                
+                if (waiting > 50) rating -= 10;
+                if (waiting > 100) rating -= 10;
+                if (waiting > 200) rating -= 10;
+                if (waiting > 400) rating -= 10;
+                if (waiting > 600) rating -= 10;
+                if (waiting > 800) rating -= 10;
+                if (waiting > 1000) rating -= 10;
+                if (waiting > 1500) rating -= 10;
+                
+                
 			}
 
 			if (Company::IsValidID(st->owner) && HasBit(st->town->statues, st->owner)) rating += 26;
 
-			byte age = ge->last_age;
+			byte age = ((cs->classes & CargoClass::CC_PASSENGERS) ? ge->last_age : 0);
 			if (age < 3) rating += 10;
 			if (age < 2) rating += 10;
 			if (age < 1) rating += 13;
